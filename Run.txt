@@ -1,0 +1,19 @@
+# FrontEnd:
+php -S localhost:3000 -t frontend
+
+# BackEnd:
+cd backend
+.\myenv\Scripts\Activate.ps1
+uvicorn app.main:app --port 8000
+
+# Alternative BackEnd Single Line Run (from project root):
+.\backend\myenv\Scripts\python.exe -m uvicorn app.main:app --port 8000 --app-dir backend
+
+# -------------------------------------------------------------
+# Google Persistent Login (Step 1 & 2):
+# Double click start_login.bat  OR run in your PowerShell terminal:
+.\start_login.bat
+
+# Open Gemini Notebook manually (if ever needed):
+# Double click open_notebook.bat OR run:
+.\open_notebook.bat

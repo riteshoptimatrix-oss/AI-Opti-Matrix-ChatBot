@@ -1,0 +1,84 @@
+# ==========================================
+# Python & Virtual Environments
+# ==========================================
+myenv/
+venv/
+env/
+.venv/
+backend/myenv/
+backend/venv/
+backend/env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==========================================
+# Sensitive Credentials & Environment Files
+# ==========================================
+.env
+backend/.env
+*.env
+*.env.*
+!.env.example
+!backend/.env.example
+
+# ==========================================
+# Browser Automation & Personal Profile Data
+# (CRITICAL: Never commit personal auth tokens/cookies)
+# ==========================================
+browser_profile/
+backend/browser_profile/
+*.lock
+backend/data/*.lock
+backend/data/*.pid
+backend/data/*.png
+backend/data/*.jpg
+backend/data/*.json
+backend/data/*.txt
+backend/data/.save_trigger
+backend/data/.stop_trigger
+!backend/data/.gitkeep
+
+# ==========================================
+# Logs & Temporary Files
+# ==========================================
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+
+# ==========================================
+# IDEs & Code Editors
+# ==========================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# OS Generated Files
+# ==========================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

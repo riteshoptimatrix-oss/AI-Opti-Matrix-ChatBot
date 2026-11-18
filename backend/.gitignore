@@ -1,0 +1,31 @@
+# Virtual Environment
+myenv/
+venv/
+env/
+.venv/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+
+# Sensitive Environment Files
+.env
+*.env
+!.env.example
+
+# Browser Profile (Sensitive user session and auth cookies)
+browser_profile/
+
+# Runtime Data & Locks
+data/*.lock
+data/*.pid
+data/*.png
+data/*.jpg
+data/*.json
+data/*.txt
+data/.save_trigger
+data/.stop_trigger
+!data/.gitkeep
+
+# Logs
+*.log
