@@ -322,7 +322,7 @@ body{
 </div>
 
 <script>
-const BACKEND_API_URL = "<?= getenv('BACKEND_API_URL') ?: 'http://localhost:8000' ?>";
+const BACKEND_API_URL = "<?= getenv('BACKEND_API_URL') ?: 'https://ai-opti-matrix-chatbot.onrender.com' ?>";
 
 const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
