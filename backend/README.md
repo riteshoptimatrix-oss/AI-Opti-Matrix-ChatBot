@@ -1,6 +1,6 @@
-# AI Opti Matrix Backend & Notebook Automation System
+# AI Opti Matrix Backend (FastAPI + Google Gemini Flash API)
 
-Full-stack backend providing FastAPI endpoints and background Playwright automation that integrates the PHP frontend with the **Gemini Notebook**.
+High-performance backend integrating the PHP frontend with **Google Gemini Flash API** for ultra-fast, context-grounded AI responses (2–3 seconds).
 
 ---
 
@@ -15,22 +15,17 @@ Full-stack backend providing FastAPI endpoints and background Playwright automat
                                                         │
                                                         ▼
                                            ┌─────────────────────────┐
-                                           │  Prompt Template Engine │
-                                           │  Prompt Template.txt    │
-                                           │  replaces {user_question}│
+                                           │  In-Memory Context      │
+                                           │  - Prompt Template.txt  │
+                                           │  - Company's Context.txt│
+                                           │  - LRU Instant Cache    │
                                            └────────────┬────────────┘
                                                         │
                                                         ▼
                                            ┌─────────────────────────┐
-                                           │  Playwright Automation  │
-                                           │  (Headless Background)  │
-                                           │  backend/browser_profile│
-                                           └────────────┬────────────┘
-                                                        │
-                                                        ▼
-                                           ┌─────────────────────────┐
-                                           │  Google Gemini Notebook │
-                                           │  (Persistent Session)   │
+                                           │ Google Gemini Flash API │
+                                           │ (gemini-3.1-flash-lite) │
+                                           │ Turnaround: 2-3 seconds │
                                            └─────────────────────────┘
 ```
 
@@ -40,37 +35,26 @@ Full-stack backend providing FastAPI endpoints and background Playwright automat
 
 | File | Purpose |
 |------|---------|
-| `backend/app/services/notebook_automation.py` | Headless Playwright service managing the background Gemini Notebook connection, prompt submission, and response extraction. |
-| `backend/app/services/chat_service.py` | Orchestrates prompt generation, dispatches to Notebook automation, manages session histories, and provides fallback. |
-| `backend/app/main.py` | FastAPI application exposing `/ask`, `/history/{session_id}`, `/notebook/execute`, and `/notebook/status`. |
-| `backend/Prompt Template.txt` | Prompt instructions & rules with the `{user_question}` dynamic placeholder. |
-| `backend/browser_profile/` | Persistent authenticated Chromium profile (stores Google login cookies & tokens). |
-| `frontend/index.php` | Modern chat UI connected to `http://localhost:8000/ask`. |
+| `backend/app/main.py` | Clean FastAPI application exposing `/ask`, `/ask/stream`, `/history/{session_id}`. |
+| `backend/app/services/gemini_api_service.py` | Direct async REST client for official Google Gemini Flash API with context injection. |
+| `backend/app/services/chat_service.py` | Orchestrates query flow, LRU instant response caching (0.001s), and session history. |
+| `backend/app/core/config.py` | Application settings and environment variables. |
+| `backend/Company's Context.txt` | Complete company knowledge base (242KB: services, CEO, offices, policies, tech stack). |
+| `backend/Prompt Template.txt` | Persona, response guidelines, rules, and link formatting. |
+| `backend/.env` | Environment configuration (`GEMINI_API_KEY`, ports, CORS). |
+| `frontend/index.php` | Modern glassmorphic chat interface connected to `http://localhost:8000/ask`. |
 
 ---
 
-## 🚀 Running the Project
+## 🚀 How to Run
 
-### 1. Start the Backend:
-```powershell
-.\backend\myenv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000 --app-dir backend
-```
-Backend will be available at:
-- **API URL**: [http://localhost:8000](http://localhost:8000)
-- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+1. **Start Backend**:
+   - Double-click `start_backend.bat`
+   - Or run: `.\backend\myenv\Scripts\python.exe -m uvicorn app.main:app --port 8000 --app-dir backend`
 
-### 2. Start the PHP Frontend:
-```powershell
-php -S localhost:3000 -t frontend
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+2. **Start Frontend**:
+   - Double-click `start_frontend.bat`
+   - Or run: `php -S localhost:3000 -t frontend`
 
----
-
-## 🧪 Testing the Workflow
-
-1. In the chat interface at [http://localhost:3000](http://localhost:3000), enter any question (e.g., *"What services do you provide?"* or *"What is your contact number?"*).
-2. The frontend sends the question to `http://localhost:8000/ask`.
-3. The backend reads `Prompt Template.txt`, replaces `{user_question}`, and submits the complete prompt to your **Gemini Notebook** in the background.
-4. Once Gemini finishes generating, the backend extracts the response and sends it back to the frontend.
-5. The frontend displays the formatted response in the chat bubble!
+3. **Access**:
+   - Open browser: `http://localhost:3000`

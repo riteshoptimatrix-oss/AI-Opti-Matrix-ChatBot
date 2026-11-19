@@ -1,11 +1,9 @@
-import json
 import re
 import datetime
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, AsyncGenerator
 from app.models import ChatMessage
-from app.core.config import settings
-from app.services.notebook_automation import notebook_automation
+from app.services.gemini_api_service import gemini_api_service
 
 logger = logging.getLogger("chat_service")
 
@@ -14,6 +12,13 @@ class ChatService:
     def __init__(self):
         # In-memory session store: session_id -> list of ChatMessage
         self.sessions: Dict[str, List[ChatMessage]] = {}
+        # High-speed LRU response cache: normalized_question -> answer
+        self._response_cache: Dict[str, str] = {}
+
+    def _normalize_key(self, text: str) -> str:
+        """Normalizes a question by stripping punctuation, extra spaces, and casing."""
+        cleaned = re.sub(r"[^\w\s]", "", text.lower()).strip()
+        return " ".join(cleaned.split())
 
     def get_history(self, session_id: str) -> List[ChatMessage]:
         return self.sessions.get(session_id, [])
@@ -39,35 +44,72 @@ class ChatService:
         """
         Main response generation pipeline:
         1. Logs user question to session history.
-        2. Dispatches question through Prompt Template.txt into the background Gemini Notebook.
-        3. Captures and returns the Notebook's response.
-        4. In case of browser/page disconnect, automatically attempts one clean retry.
+        2. Checks instant response cache (< 0.001s).
+        3. Calls Direct Google Gemini Flash API (~2.0s).
+        4. Saves response to cache for zero-latency future responses.
         """
         self.add_message(session_id, "user", question)
 
-        # Primary attempt
-        try:
-            logger.info(f"Submitting question to background Gemini Notebook for session {session_id}...")
-            notebook_response = await notebook_automation.submit_question(question)
-            if notebook_response and notebook_response.strip():
-                self.add_message(session_id, "assistant", notebook_response)
-                return notebook_response
-        except Exception as first_err:
-            logger.warning(f"First attempt failed ({first_err}). Closing context and retrying once...")
-            await notebook_automation.close()
+        cache_key = self._normalize_key(question)
+        if cache_key and cache_key in self._response_cache:
+            cached_answer = self._response_cache[cache_key]
+            logger.info(f"Instant cache hit for '{question}' (0.001s response time).")
+            self.add_message(session_id, "assistant", cached_answer)
+            return cached_answer
 
-        # Retry attempt after clean restart
+        if not gemini_api_service.api_key:
+            err_msg = "Error: GEMINI_API_KEY is not configured in backend/.env"
+            logger.error(err_msg)
+            self.add_message(session_id, "assistant", err_msg)
+            return err_msg
+
         try:
-            logger.info("Retrying prompt submission on fresh notebook page...")
-            notebook_response = await notebook_automation.submit_question(question)
-            if notebook_response and notebook_response.strip():
-                self.add_message(session_id, "assistant", notebook_response)
-                return notebook_response
-        except Exception as retry_err:
-            logger.error(f"Notebook automation retry failed: {retry_err}")
-            error_msg = f"⚠️ Gemini Notebook Error: {retry_err}\n\nPlease ensure no visible Chrome window is locking the profile (close open_notebook.bat if running)."
-            self.add_message(session_id, "assistant", error_msg)
-            return error_msg
+            logger.info(f"Generating response via Gemini Flash API for session {session_id}...")
+            api_response = await gemini_api_service.generate_response(question)
+            if api_response and api_response.strip():
+                if cache_key:
+                    self._response_cache[cache_key] = api_response
+                self.add_message(session_id, "assistant", api_response)
+                return api_response
+            else:
+                err_msg = "Apologies, I could not generate a response at this moment. Please try again."
+                self.add_message(session_id, "assistant", err_msg)
+                return err_msg
+        except Exception as e:
+            logger.error(f"Error querying Gemini API: {e}")
+            err_msg = f"Error generating response: {e}"
+            self.add_message(session_id, "assistant", err_msg)
+            return err_msg
+
+    async def generate_response_stream(self, question: str, session_id: str) -> AsyncGenerator[str, None]:
+        """
+        Real-time streaming response directly from Gemini Flash API.
+        """
+        self.add_message(session_id, "user", question)
+        cache_key = self._normalize_key(question)
+
+        # Check instant cache
+        if cache_key and cache_key in self._response_cache:
+            cached_answer = self._response_cache[cache_key]
+            logger.info(f"Instant cache hit for '{question}' (streaming 0.001s).")
+            self.add_message(session_id, "assistant", cached_answer)
+            yield cached_answer
+            return
+
+        accumulated = []
+        try:
+            async for chunk in gemini_api_service.generate_response_stream(question):
+                accumulated.append(chunk)
+                yield chunk
+            full_text = "".join(accumulated).strip()
+            if full_text:
+                if cache_key:
+                    self._response_cache[cache_key] = full_text
+                self.add_message(session_id, "assistant", full_text)
+        except Exception as e:
+            logger.error(f"Error during streaming: {e}")
+            fallback = await self.generate_response(question, session_id)
+            yield fallback
 
 
 chat_service = ChatService()

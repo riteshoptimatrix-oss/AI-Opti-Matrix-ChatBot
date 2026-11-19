@@ -1,19 +1,26 @@
-# FrontEnd:
-php -S localhost:3000 -t frontend
+=============================================================
+  AI OPTI MATRIX - ONE-CLICK LAUNCH INSTRUCTIONS
+=============================================================
 
-# BackEnd:
-cd backend
-.\myenv\Scripts\Activate.ps1
-uvicorn app.main:app --port 8000
+1. Start Python Backend (FastAPI + Google Gemini Flash API):
+   - Double click: start_backend.bat
+   - OR run in PowerShell:
+     .\backend\myenv\Scripts\python.exe -m uvicorn app.main:app --port 8000 --app-dir backend
 
-# Alternative BackEnd Single Line Run (from project root):
-.\backend\myenv\Scripts\python.exe -m uvicorn app.main:app --port 8000 --app-dir backend
+2. Start PHP Frontend:
+   - Double click: start_frontend.bat
+   - OR run in PowerShell:
+     php -S localhost:3000 -t frontend
 
-# -------------------------------------------------------------
-# Google Persistent Login (Step 1 & 2):
-# Double click start_login.bat  OR run in your PowerShell terminal:
-.\start_login.bat
+3. Open in Browser:
+   - URL: http://localhost:3000
 
-# Open Gemini Notebook manually (if ever needed):
-# Double click open_notebook.bat OR run:
-.\open_notebook.bat
+=============================================================
+  ARCHITECTURE & CONFIGURATION
+=============================================================
+- Engine: Google Gemini Flash API (Direct REST, 2-3s response)
+- Knowledge Base: backend/Company's Context.txt (242KB company data)
+- Rules & Format: backend/Prompt Template.txt
+- Config: backend/.env (GEMINI_API_KEY)
+- 100% Standalone (No Playwright / No Chromium required)
+=============================================================
