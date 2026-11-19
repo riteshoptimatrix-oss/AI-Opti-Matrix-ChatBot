@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Optional
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -23,7 +24,7 @@ logger = logging.getLogger("opti_matrix_api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("FastAPI AI Opti Matrix Backend starting up...")
-    logger.info("⚡ Engine Active: Direct Google Gemini Flash API.")
+    logger.info("⚡ Engine Active: AI Assistant Engine.")
     yield
     logger.info("FastAPI AI Opti Matrix Backend shutting down...")
     await gemini_api_service.close()
@@ -31,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AI Opti Matrix Backend API",
-    description="FastAPI backend for AI Opti Matrix Assistant powered by Google Gemini Flash API.",
+    description="FastAPI backend for AI Opti Matrix Assistant.",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -53,18 +54,37 @@ async def root():
     return {
         "status": "online",
         "app": "AI Opti Matrix Backend",
-        "version": "2.0.0",
-        "engine": "Google Gemini Flash API",
-        "docs_url": "/docs"
+        "version": "2.0.0"
     }
 
 
 # Chat Endpoints
+@app.get("/ask", tags=["Chat"])
+async def ask_question_get(
+    question: Optional[str] = None,
+    q: Optional[str] = None,
+    session_id: Optional[str] = "default"
+):
+    """
+    Handles GET requests to /ask so opening the URL directly in a browser
+    returns 200 OK and allows quick testing via ?question= or ?q=.
+    """
+    query = question or q
+    if query and query.strip():
+        answer = await chat_service.generate_response(query.strip(), session_id)
+        return AskResponse(answer=answer, session_id=session_id)
+    return {
+        "status": "online",
+        "endpoint": "/ask",
+        "description": "Send a POST request with JSON body {'question': 'your query'} or use ?question= in the browser."
+    }
+
+
 @app.post("/ask", response_model=AskResponse, tags=["Chat"])
 async def ask_question(payload: AskRequest):
     """
     Main chat endpoint used by the PHP frontend.
-    Processes user questions using Company Context and Prompt Template via Gemini Flash API.
+    Processes user questions using Company Context and Prompt Template.
     """
     session_id = payload.session_id or "default"
     try:
