@@ -40,17 +40,50 @@ class ChatService:
             return True
         return False
 
+    def format_history(self, session_id: str, current_question: str) -> str:
+        """Formats prior conversation turns with clear numbering so the AI can recall previous chats."""
+        history = self.get_history(session_id)
+        if not history:
+            return "No previous messages in this session. (Current message is the very first message)."
+
+        lines = []
+        user_turn_count = 0
+        for msg in history[-14:]:  # last 14 messages for rich context
+            if msg.role == "user":
+                user_turn_count += 1
+                lines.append(f"- User (User Message #{user_turn_count}): \"{msg.content}\"")
+            else:
+                lines.append(f"- Opti Matrix AI: \"{msg.content}\"")
+
+        # Label the current incoming question
+        current_num = user_turn_count + 1
+        lines.append(f"- User (User Message #{current_num} - Current Question): \"{current_question}\"")
+        return "\n".join(lines)
+
+    def _is_context_dependent(self, text: str) -> bool:
+        """Checks if question refers to ongoing conversation history."""
+        patterns = [
+            r"\b(chat|chats|message|messages|previous|earlier|last|first|1st|2nd|3rd|4th|5th|before|again)\b",
+            r"\b(my\s+question|my\s+chat|my\s+message|you\s+said|what\s+did\s+i)\b"
+        ]
+        lowered = text.lower()
+        return any(re.search(p, lowered) for p in patterns)
+
     async def generate_response(self, question: str, session_id: str) -> str:
         """
         Main response generation pipeline:
-        1. Logs user question to session history.
-        2. Checks instant response cache (< 0.001s).
-        3. Calls Direct Google Gemini Flash API (~2.0s).
-        4. Saves response to cache for zero-latency future responses.
+        1. Formats conversation history for context awareness.
+        2. Logs user question to session history.
+        3. Checks instant response cache for non-conversational questions (< 0.001s).
+        4. Calls Direct Google Gemini Flash API with history (~2.0s).
+        5. Saves response to cache for zero-latency future responses.
         """
+        history_context = self.format_history(session_id, question)
         self.add_message(session_id, "user", question)
 
-        cache_key = self._normalize_key(question)
+        is_contextual = self._is_context_dependent(question)
+        cache_key = self._normalize_key(question) if not is_contextual else None
+
         if cache_key and cache_key in self._response_cache:
             cached_answer = self._response_cache[cache_key]
             logger.info(f"Instant cache hit for '{question}' (0.001s response time).")
@@ -65,7 +98,7 @@ class ChatService:
 
         try:
             logger.info(f"Generating response via Gemini Flash API for session {session_id}...")
-            api_response = await gemini_api_service.generate_response(question)
+            api_response = await gemini_api_service.generate_response(question, conversation_history=history_context)
             if api_response and api_response.strip():
                 if cache_key:
                     self._response_cache[cache_key] = api_response
@@ -83,10 +116,13 @@ class ChatService:
 
     async def generate_response_stream(self, question: str, session_id: str) -> AsyncGenerator[str, None]:
         """
-        Real-time streaming response directly from Gemini Flash API.
+        Real-time streaming response directly from Gemini Flash API with conversation history.
         """
+        history_context = self.format_history(session_id, question)
         self.add_message(session_id, "user", question)
-        cache_key = self._normalize_key(question)
+
+        is_contextual = self._is_context_dependent(question)
+        cache_key = self._normalize_key(question) if not is_contextual else None
 
         # Check instant cache
         if cache_key and cache_key in self._response_cache:
@@ -98,7 +134,7 @@ class ChatService:
 
         accumulated = []
         try:
-            async for chunk in gemini_api_service.generate_response_stream(question):
+            async for chunk in gemini_api_service.generate_response_stream(question, conversation_history=history_context):
                 accumulated.append(chunk)
                 yield chunk
             full_text = "".join(accumulated).strip()

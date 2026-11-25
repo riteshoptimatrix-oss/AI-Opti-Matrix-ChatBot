@@ -82,10 +82,17 @@ class GeminiAPIService:
                 self._cached_context = ""
             self._context_mtime = ctx_mtime
 
-    def build_prompt(self, user_question: str) -> str:
-        """Constructs prompt using the template and company context."""
+    def build_prompt(self, user_question: str, conversation_history: str = "") -> str:
+        """Constructs prompt using the template, conversation history, and company context."""
         self._load_data()
         prompt = self._cached_template
+
+        hist_text = conversation_history.strip() if conversation_history else "No previous messages (This is the start of the chat)."
+        if "{conversation_history}" in prompt:
+            prompt = prompt.replace("{conversation_history}", hist_text)
+        elif "USER QUESTION:" in prompt:
+            prompt = prompt.replace("USER QUESTION:", f"CURRENT SESSION CONVERSATION HISTORY:\n{hist_text}\n\nUSER QUESTION:")
+
         if "{user_question}" in prompt:
             prompt = prompt.replace("{user_question}", user_question.strip())
         else:
@@ -112,7 +119,7 @@ class GeminiAPIService:
             )
         return self._client
 
-    async def generate_response(self, user_question: str) -> Optional[str]:
+    async def generate_response(self, user_question: str, conversation_history: str = "") -> Optional[str]:
         """
         Sends prompt to Google's official Gemini Flash API.
         Returns generated answer in 2-3 seconds.
@@ -121,19 +128,21 @@ class GeminiAPIService:
         if not rotated_keys:
             return None
 
-        prompt = self.build_prompt(user_question)
+        prompt = self.build_prompt(user_question, conversation_history)
         client = await self.get_client()
 
         payload = {
             "systemInstruction": {
                 "parts": [{
                     "text": (
-                        "You are a professional assistant for Opti Matrix Solutions.\n"
+                        "You are Opti Matrix AI, the official intelligent AI assistant for Opti Matrix Solutions.\n"
                         "CRITICAL RULES:\n"
-                        "1. ALWAYS answer strictly in English only, regardless of the language the user asked in.\n"
-                        "2. When asked about projects of a specific technology (e.g. WordPress, PHP, Webflow), "
+                        "1. YOUR IDENTITY: Your name is strictly **Opti Matrix AI**. If the user asks who you are, what your name is, or 'are you Opti Matrix AI?', always proudly confirm: 'Yes, I am **Opti Matrix AI**! 🤖✨, your virtual assistant for Opti Matrix Solutions!'\n"
+                        "2. CONVERSATION MEMORY: You have access to the CURRENT SESSION CONVERSATION HISTORY. When the user asks about previous chats, questions, or messages in this conversation (e.g. 'what is my 3rd chat?', 'what was my last question?', 'what did I ask earlier?'), refer directly to the conversation history and answer accurately. Never say 'This information is not available in the provided company data' for questions about the conversation itself!\n"
+                        "3. ALWAYS answer strictly in English only, regardless of the language the user asked in.\n"
+                        "4. When asked about projects of a specific technology (e.g. WordPress, PHP, Webflow), "
                         "state the exact total count from the company data and list ALL matching projects with their project name and live URL without omitting any.\n"
-                        "3. Keep answers crisp, clean, accurate, and based strictly on the provided company data."
+                        "5. Keep answers crisp, clean, accurate, and based strictly on the provided company data."
                     )
                 }]
             },
@@ -172,7 +181,7 @@ class GeminiAPIService:
 
         return None
 
-    async def generate_response_stream(self, user_question: str) -> AsyncGenerator[str, None]:
+    async def generate_response_stream(self, user_question: str, conversation_history: str = "") -> AsyncGenerator[str, None]:
         """
         Streams generated response chunks via Server-Sent Events from Gemini Flash API.
         """
@@ -180,19 +189,21 @@ class GeminiAPIService:
         if not rotated_keys:
             return
 
-        prompt = self.build_prompt(user_question)
+        prompt = self.build_prompt(user_question, conversation_history)
         client = await self.get_client()
 
         payload = {
             "systemInstruction": {
                 "parts": [{
                     "text": (
-                        "You are a professional assistant for Opti Matrix Solutions.\n"
+                        "You are Opti Matrix AI, the official intelligent AI assistant for Opti Matrix Solutions.\n"
                         "CRITICAL RULES:\n"
-                        "1. ALWAYS answer strictly in English only, regardless of the language the user asked in.\n"
-                        "2. When asked about projects of a specific technology (e.g. WordPress, PHP, Webflow), "
+                        "1. YOUR IDENTITY: Your name is strictly **Opti Matrix AI**. If the user asks who you are, what your name is, or 'are you Opti Matrix AI?', always proudly confirm: 'Yes, I am **Opti Matrix AI**! 🤖✨, your virtual assistant for Opti Matrix Solutions!'\n"
+                        "2. CONVERSATION MEMORY: You have access to the CURRENT SESSION CONVERSATION HISTORY. When the user asks about previous chats, questions, or messages in this conversation (e.g. 'what is my 3rd chat?', 'what was my last question?', 'what did I ask earlier?'), refer directly to the conversation history and answer accurately. Never say 'This information is not available in the provided company data' for questions about the conversation itself!\n"
+                        "3. ALWAYS answer strictly in English only, regardless of the language the user asked in.\n"
+                        "4. When asked about projects of a specific technology (e.g. WordPress, PHP, Webflow), "
                         "state the exact total count from the company data and list ALL matching projects with their project name and live URL without omitting any.\n"
-                        "3. Keep answers crisp, clean, accurate, and based strictly on the provided company data."
+                        "5. Keep answers crisp, clean, accurate, and based strictly on the provided company data."
                     )
                 }]
             },
