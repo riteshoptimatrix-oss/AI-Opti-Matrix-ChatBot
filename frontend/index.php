@@ -582,6 +582,55 @@ document.getElementById('new-chat').addEventListener('click', () => {
   chatInput.focus();
 });
 
+function createStreamingBotMessage() {
+  clearWelcome();
+  const wrapper = document.createElement('div');
+  wrapper.className = 'message-wrapper bot';
+
+  const av = document.createElement('div');
+  av.className = 'bot-avatar-small';
+  av.innerHTML = BOT_ICON;
+  wrapper.appendChild(av);
+
+  const inner = document.createElement('div');
+  inner.className = 'message-inner';
+
+  const el = document.createElement('div');
+  el.className = 'message bot';
+  inner.appendChild(el);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.innerHTML = `<span>${timeNow()}</span>`;
+
+  const copy = document.createElement('button');
+  copy.className = 'copy-btn';
+  copy.type = 'button';
+  copy.innerHTML = COPY_ICON + '<span>Copy</span>';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(el.innerText);
+      copy.querySelector('span').textContent = 'Copied!';
+      setTimeout(() => copy.querySelector('span').textContent = 'Copy', 1500);
+    } catch (e) {}
+  });
+  meta.appendChild(copy);
+  inner.appendChild(meta);
+
+  wrapper.appendChild(inner);
+  chatMessages.appendChild(wrapper);
+  scrollToBottom();
+
+  return {
+    wrapper,
+    update: (content) => {
+      el.innerHTML = renderMessageContent(content);
+      scrollToBottom();
+    },
+    remove: () => wrapper.remove()
+  };
+}
+
 /* ---------- Send ---------- */
 chatForm.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -603,15 +652,70 @@ chatForm.addEventListener('submit', async (e) => {
   }, 4000);
 
   try {
-    const response = await fetch(BACKEND_API_URL + "/ask", {
+    const response = await fetch(BACKEND_API_URL + "/ask/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question: userMsg, session_id: sessionId }),
     });
-    if (!response.ok) throw new Error("Server communication failed");
-    const data = await response.json();
-    hideTyping();
-    addMessage('bot', data.answer || "I'm sorry, I couldn't process that. Please try again.");
+
+    if (response.ok && response.body) {
+      hideTyping();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let streamMsg = null;
+      let accumulated = "";
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.substring(5).trim();
+          if (dataStr === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.chunk) {
+              if (!streamMsg) streamMsg = createStreamingBotMessage();
+              accumulated += parsed.chunk;
+              streamMsg.update(accumulated);
+            }
+          } catch(err) {
+            if (dataStr && dataStr !== "[DONE]") {
+              if (!streamMsg) streamMsg = createStreamingBotMessage();
+              accumulated += dataStr;
+              streamMsg.update(accumulated);
+            }
+          }
+        }
+      }
+
+      if (!accumulated) {
+        // Fallback to static ask if stream was empty
+        const fallbackRes = await fetch(BACKEND_API_URL + "/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: userMsg, session_id: sessionId }),
+        });
+        const d = await fallbackRes.json();
+        addMessage('bot', d.answer || "I'm sorry, I couldn't process that. Please try again.");
+      }
+    } else {
+      // Fallback to standard non-streaming ask
+      const fallbackRes = await fetch(BACKEND_API_URL + "/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: userMsg, session_id: sessionId }),
+      });
+      const d = await fallbackRes.json();
+      hideTyping();
+      addMessage('bot', d.answer || "I'm sorry, I couldn't process that. Please try again.");
+    }
   } catch (error) {
     console.error("Error:", error);
     hideTyping();

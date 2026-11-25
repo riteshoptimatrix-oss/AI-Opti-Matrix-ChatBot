@@ -21,9 +21,9 @@ from app.core.config import settings
 logger = logging.getLogger("gemini_api_service")
 
 MODELS = [
-    "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest",
     "gemini-3.5-flash-lite",
-    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
 ]
 
 
@@ -34,6 +34,8 @@ class GeminiAPIService:
 
         self._cached_template: Optional[str] = None
         self._cached_context: Optional[str] = None
+        self._sections: dict[str, str] = {}
+        self._core_context: str = ""
         self._template_mtime: float = 0.0
         self._context_mtime: float = 0.0
         self._client: Optional[httpx.AsyncClient] = None
@@ -78,10 +80,91 @@ class GeminiAPIService:
         ctx_mtime = self.context_path.stat().st_mtime if self.context_path.exists() else 0.0
         if self._cached_context is None or ctx_mtime != self._context_mtime:
             if self.context_path.exists():
-                self._cached_context = self.context_path.read_text(encoding="utf-8")
+                raw = self.context_path.read_text(encoding="utf-8")
+                self._cached_context = raw
+
+                # Segment context into indexable sections for high-speed dynamic injection
+                section_markers = [
+                    ('overview', r'=\s*1\.\s+COMPANY OVERVIEW'),
+                    ('leadership', r'=\s*2\.\s+LEADERSHIP'),
+                    ('contact', r'=\s*3\.\s+CONTACT INFORMATION'),
+                    ('careers', r'=\s*4\.\s+CAREERS'),
+                    ('clients', r'=\s*5\.\s+CLIENTS'),
+                    ('websites', r'=\s*6\.\s+WEBSITES'),
+                    ('portfolio', r'=\s*7\.\s+PORTFOLIO'),
+                    ('projects', r'=\s*8\.\s+PROJECTS & WORK'),
+                    ('services', r'=\s*9\.\s+SERVICES'),
+                    ('policies', r'=\s*10\.\s+POLICIES & LEGAL'),
+                    ('social', r'=\s*11\.\s+SOCIAL MEDIA'),
+                    ('faqs', r'=\s*12\.\s+ADDITIONAL FAQS'),
+                ]
+                positions = []
+                for name, pat in section_markers:
+                    m = re.search(pat, raw)
+                    if m:
+                        positions.append((m.start(), name))
+                positions.sort()
+
+                self._sections = {}
+                for i, (pos, name) in enumerate(positions):
+                    end = positions[i+1][0] if i+1 < len(positions) else len(raw)
+                    self._sections[name] = raw[pos:end].strip()
+
+                self._core_context = "\n\n".join(
+                    [self._sections.get(k, '') for k in ['overview', 'leadership', 'contact', 'careers', 'websites'] if k in self._sections]
+                )
             else:
                 self._cached_context = ""
+                self._sections = {}
+                self._core_context = ""
             self._context_mtime = ctx_mtime
+
+    def _get_optimized_context(self, user_question: str) -> str:
+        """Dynamically provides relevant company context to ensure fastest possible LLM generation."""
+        q_low = user_question.lower()
+
+        # If question is purely conversational memory or bot identity, omit massive company text
+        memory_patterns = [
+            r"\b(what\s+was\s+my|what\s+did\s+i|previous\s+question|first\s+question|3rd\s+chat|my\s+chat|repeat\s+my|who\s+are\s+you|are\s+you\s+opti)\b"
+        ]
+        if any(re.search(p, q_low) for p in memory_patterns) and not any(k in q_low for k in ["project", "service", "office", "address", "ceo", "hire", "apply"]):
+            return "Opti Matrix Solutions (Optimize the Complicated) is an offshore digital agency founded in 2010 by Vishal Shah in Ahmedabad, Gujarat, India."
+
+        if not self._sections:
+            return self._cached_context or ""
+
+        parts = [self._core_context]
+
+        # Projects / Portfolio routing
+        if any(w in q_low for w in ["project", "portfolio", "wordpress", "website", "client", "work", "built", "show", "developed"]):
+            if "projects" in self._sections:
+                parts.append(self._sections["projects"])
+
+        # Services / Tech stack routing
+        if any(w in q_low for w in ["service", "tech", "stack", "php", "react", "next", "angular", "node", "mobile", "app", "flutter", "ios", "android", "offer"]):
+            if "services" in self._sections:
+                parts.append(self._sections["services"])
+
+        # FAQs / Pricing / Timeline / Process
+        if any(w in q_low for w in ["faq", "price", "cost", "quote", "timeline", "process", "nda", "policy"]):
+            if "faqs" in self._sections:
+                parts.append(self._sections["faqs"])
+            if "policies" in self._sections:
+                parts.append(self._sections["policies"])
+
+        # Social links
+        if any(w in q_low for w in ["social", "linkedin", "facebook", "instagram", "twitter"]):
+            if "social" in self._sections:
+                parts.append(self._sections["social"])
+
+        if len(parts) == 1:
+            # Broad query: attach services and FAQs
+            if "services" in self._sections:
+                parts.append(self._sections["services"])
+            if "faqs" in self._sections:
+                parts.append(self._sections["faqs"])
+
+        return "\n\n".join(parts)
 
     def build_prompt(self, user_question: str, conversation_history: str = "") -> str:
         """Constructs prompt using the template, conversation history, and company context."""
@@ -99,17 +182,18 @@ class GeminiAPIService:
         else:
             prompt = f"{prompt}\n\nUSER QUESTION:\n{user_question.strip()}"
 
-        if self._cached_context:
+        active_context = self._get_optimized_context(user_question)
+        if active_context:
             prompt = re.sub(
                 r"COMPANY INFORMATION\s*:-\s*Company's Context\.txt file\s*",
-                f"COMPANY INFORMATION :-\n{self._cached_context}\n",
+                f"COMPANY INFORMATION :-\n{active_context}\n",
                 prompt,
                 flags=re.IGNORECASE
             )
-            if self._cached_context not in prompt and "COMPANY INFORMATION :-" in prompt:
+            if active_context not in prompt and "COMPANY INFORMATION :-" in prompt:
                 prompt = prompt.replace(
                     "COMPANY INFORMATION :-",
-                    f"COMPANY INFORMATION :-\n{self._cached_context}"
+                    f"COMPANY INFORMATION :-\n{active_context}"
                 )
         return prompt
 
