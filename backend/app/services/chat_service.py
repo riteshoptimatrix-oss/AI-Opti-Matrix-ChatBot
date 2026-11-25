@@ -61,10 +61,10 @@ class ChatService:
         return "\n".join(lines)
 
     def _is_context_dependent(self, text: str) -> bool:
-        """Checks if question refers to ongoing conversation history."""
+        """Checks if question refers to ongoing conversation history or identity."""
         patterns = [
-            r"\b(chat|chats|message|messages|previous|earlier|last|first|1st|2nd|3rd|4th|5th|before|again)\b",
-            r"\b(my\s+question|my\s+chat|my\s+message|you\s+said|what\s+did\s+i)\b"
+            r"\b(chat|chats|message|messages|previous|earlier|last|first|1st|2nd|3rd|4th|5th|before|again|repeat)\b",
+            r"\b(my\s+question|my\s+chat|my\s+message|you\s+said|what\s+did\s+i|what\s+was\s+my|who\s+are\s+you|are\s+you|your\s+name)\b"
         ]
         lowered = text.lower()
         return any(re.search(p, lowered) for p in patterns)
