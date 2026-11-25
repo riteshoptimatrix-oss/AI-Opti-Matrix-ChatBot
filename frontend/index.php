@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Opti Matrix AI Assistant</title>
+<title>Opti Matrix AI</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -289,7 +289,7 @@ body{
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg>
       </div>
       <div>
-        <h1>Opti Matrix Assistant</h1>
+        <h1>Opti Matrix AI</h1>
         <div class="sub"><span class="live"></span>Online · Always here to optimize your matrix</div>
       </div>
     </div>
@@ -522,13 +522,15 @@ function showWelcome() {
   chatMessages.innerHTML = `
     <div class="welcome">
       <div class="big-logo">${BOT_ICON}</div>
-      <h2>Hello! I'm the <span>Opti Matrix</span> AI Assistant</h2>
-      <p>We specialize in optimizing complicated digital challenges. Pick a topic below or ask me anything.</p>
+      <h2>Hello! I'm <span>Opti Matrix AI</span> 🤖</h2>
+      <p>I am your virtual assistant for Opti Matrix Solutions. Pick a topic below or ask me anything.</p>
       <div class="chips">
         <button class="chip" data-q="What does Opti Matrix do?">✨ What does Opti Matrix do?</button>
-        <button class="chip" data-q="Show me the Opti Matrix journey">🚀 Company journey</button>
-        <button class="chip" data-q="Who is the founder?">👤 Meet the founder</button>
-        <button class="chip" data-q="What services do you offer?">🛠️ Our services</button>
+        <button class="chip" data-q="Show me your WordPress projects">🌐 29 WordPress Projects</button>
+        <button class="chip" data-q="Who is the Founder & CEO of Opti Matrix?">👤 Meet the CEO</button>
+        <button class="chip" data-q="Where are your office locations?">📍 Office Locations</button>
+        <button class="chip" data-q="How can I apply for a job?">💼 Careers & Jobs</button>
+        <button class="chip" data-q="What services do you offer?">🛠️ Services & Tech Stack</button>
       </div>
     </div>`;
 }
@@ -541,7 +543,10 @@ function showTyping() {
   const w = document.createElement('div');
   w.className = 'message-wrapper bot typing-wrapper';
   w.innerHTML = `<div class="bot-avatar-small">${BOT_ICON}</div>
-    <div class="message-inner"><div class="typing-indicator"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
+    <div class="message-inner">
+      <div class="typing-indicator"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="typing-status" id="typing-status" style="font-size:0.75rem;color:var(--text-3);margin-top:4px;"></div>
+    </div>`;
   chatMessages.appendChild(w);
   scrollToBottom();
 }
@@ -558,11 +563,21 @@ function generateUUID() {
     return v.toString(16);
   });
 }
-let sessionId = generateUUID();
+function getOrCreateSessionId() {
+  let s = null;
+  try { s = sessionStorage.getItem('om-session-id'); } catch(e){}
+  if (!s) {
+    s = generateUUID();
+    try { sessionStorage.setItem('om-session-id', s); } catch(e){}
+  }
+  return s;
+}
+let sessionId = getOrCreateSessionId();
 
 document.getElementById('new-chat').addEventListener('click', () => {
   if (isLoading) return;
   sessionId = generateUUID();
+  try { sessionStorage.setItem('om-session-id', sessionId); } catch(e){}
   showWelcome();
   chatInput.focus();
 });
@@ -580,6 +595,13 @@ chatForm.addEventListener('submit', async (e) => {
   isLoading = true;
   showTyping();
 
+  const wakeTimer = setTimeout(() => {
+    const statusEl = document.getElementById('typing-status');
+    if (statusEl && isLoading) {
+      statusEl.textContent = "Connecting to Opti Matrix AI server...";
+    }
+  }, 4000);
+
   try {
     const response = await fetch(BACKEND_API_URL + "/ask", {
       method: "POST",
@@ -595,6 +617,7 @@ chatForm.addEventListener('submit', async (e) => {
     hideTyping();
     addMessage('bot', "⚠️ Connection error. Please ensure the backend is running and try again.");
   } finally {
+    clearTimeout(wakeTimer);
     isLoading = false;
     sendButton.disabled = !chatInput.value.trim();
     chatInput.focus();
